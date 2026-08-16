@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+coverage/
+.env
+.env.*
+!.env.example
+data/
+inbox/
+outbox/
+sdk-state/
+*.log
+*.qr
+*.qrcode
+*.png
