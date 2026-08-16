@@ -26,8 +26,9 @@ export async function inspectAllowedFile({
     throw new PolicyError("NO_ALLOWED_FILE_ROOT", "未配置允许的文件来源目录");
   }
 
+  const resolvedAllowedRoots = allowedRoots.map((root) => path.resolve(root));
   const requestedPath = path.resolve(filePath);
-  if (!allowedRoots.some((root) => {
+  if (!resolvedAllowedRoots.some((root) => {
     try {
       assertPathWithinRoot(requestedPath, root);
       return true;
@@ -43,7 +44,8 @@ export async function inspectAllowedFile({
     throw new PolicyError("SYMLINK_NOT_ALLOWED", "符号链接或目录联接不允许作为文件输入");
   }
   const realPath = await fs.realpath(requestedPath);
-  if (!allowedRoots.some((root) => {
+  const realAllowedRoots = await Promise.all(resolvedAllowedRoots.map((root) => fs.realpath(root)));
+  if (!realAllowedRoots.some((root) => {
     try {
       assertPathWithinRoot(realPath, root);
       return true;
