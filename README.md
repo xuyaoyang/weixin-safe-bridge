@@ -57,6 +57,12 @@ pnpm weixin:start -- --confirm-real-connection
 
 登录入口会把 SDK 状态定向到 `WEIXIN_BRIDGE_DATA_DIR\sdk-state`，不要求安装或运行 OpenClaw。运行入口只接收并落盘；不会自动回复。真实主动发送尚未提供通用 CLI，必须由本地受控程序显式构造 `createOutboundController()` 并调用，且应在单独授权的真实联调中验证。
 
+## Windows 登录后自动启动（可选）
+
+`scripts/start-windows-bridge.ps1` 用于受控的固定目录部署：源码位于 `<service-root>\app`，运行数据和日志位于同级 `runtime-data`、`logs`。脚本只有在本地调用者显式传入 `-ConfirmRealConnection` 时才连接，并同时设置 CLI 所需的连接门禁；重复调用会阻止第二个桥接进程。脚本默认使用 Codex bundled Node.js，也可由本地管理者通过绝对 `-NodePath` 显式指定其他 Node.js 22+ 运行时。
+
+注册或删除 Windows 登录触发任务属于本地管理操作，不由微信入站内容触发。首次设置后仍应在用户可接受的时段做一次真实重启验收；既有 SDK 凭据通常可恢复，但凭据失效或被服务端撤销时仍可能要求重新扫码。
+
 ## 明确不支持
 
 - 微信命令、斜杠命令、远程终端、目录浏览、文件检索、删除、安装或启动程序。
