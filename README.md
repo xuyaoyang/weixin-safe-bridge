@@ -73,6 +73,8 @@ pnpm weixin:start -- --confirm-real-connection
 
 `scripts/start-windows-bridge.ps1` 用于受控的固定目录部署：源码位于 `<service-root>\app`，运行数据和日志位于同级 `runtime-data`、`logs`。脚本只有在本地调用者显式传入 `-ConfirmRealConnection` 时才连接，并同时设置 CLI 所需的连接门禁；重复调用会阻止第二个桥接进程。脚本默认使用 Codex bundled Node.js，也可由本地管理者通过绝对 `-NodePath` 显式指定其他 Node.js 22+ 运行时。
 
+Windows 上的 pnpm 依赖链接与安装目录有关。若使用旁路目录构建后再把整个 `app` 移到固定路径，必须在最终 `<service-root>\app` 路径重新执行 `pnpm install --frozen-lockfile --force` 并运行 `pnpm check`，否则移动前创建的依赖链接可能失效。
+
 为避免交互式计划任务在 Windows Terminal 中留下可见窗口，任务动作应使用 Windows 自带的 `wscript.exe` 以 `//B //Nologo` 运行 `scripts/start-windows-bridge.vbs`。该无窗口包装仍会调用上述 PowerShell 脚本，因此显式连接门禁、固定数据目录和单实例检查保持不变。
 
 注册或删除 Windows 登录触发任务属于本地管理操作，不由微信入站内容触发。首次设置后仍应在用户可接受的时段做一次真实重启验收；既有 SDK 凭据通常可恢复，但凭据失效或被服务端撤销时仍可能要求重新扫码。
