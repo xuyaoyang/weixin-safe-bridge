@@ -42,6 +42,7 @@
 - 交互式 PowerShell 任务虽带 `-WindowStyle Hidden`，仍被 Windows Terminal 显示为空白窗口。系统拒绝在非提升权限下改为 S4U 后，改用 WScript 无窗口包装；重启任务后进程链为 `wscript.exe` → `powershell.exe` → `node.exe`，新增控制台宿主只有无可见主窗口的隐藏 `conhost.exe`，桥接进程 1 个、活动连接存在、outbox 为 0。
 - 文件策略与本地收发新增离线测试：真实 DWG 头和常用工程格式通过，伪造 DWG、扩展名/内容不一致、宏文档、通用 ZIP、越界路径和脚本失败关闭；准备阶段发送数为 0，缺少明确确认拒绝，批准不可重放，批准后替换文件拒绝，收件导出重新校验 SHA-256 且不覆盖。全套 Node 测试现为 19 项通过。
 - `weixin-send-file` 与 `weixin-receive-file` 安装在本机 Codex Skills 目录并通过 `skill-creator` 的 `quick_validate.py`；发件 Skill 只有在本地用户当前请求明确给出唯一绝对路径和“发送”动作时才提交，预检请求不外发。
+- 固定运行副本已快进到提交 `0b7ae29`，锁文件安装、19/19 测试、安装后 SDK 补丁扫描和生产依赖审计通过。任务重启后桥接进程 1 个且连接活动；`local-control` 和默认 `received` 目录均关闭 ACL 继承，只允许当前用户与 SYSTEM。本地令牌握手只执行了“不存在批准的取消”并成功返回，未创建批准；outbox 文件和 `OUTBOUND_*` 审计仍为 0。
 
 ## 发布边界
 
