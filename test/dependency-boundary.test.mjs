@@ -27,3 +27,13 @@ test("补丁删除斜杠命令调用和所有入站触发外发分支", async ()
   assert.match(patchText, /^-\s*sendWeixinErrorNotice\(/mu);
   assert.match(patchText, /^\+\s*await deps\.agent\.chat\(request\);/mu);
 });
+
+test("入站处理模块不引用本地发送控制面", async () => {
+  const inboundSources = await Promise.all([
+    "src/bridge-agent.mjs",
+    "src/inbox-store.mjs",
+    "src/file-policy.mjs",
+  ].map((relativePath) => fs.readFile(path.join(projectRoot, relativePath), "utf8")));
+  const combined = inboundSources.join("\n");
+  assert.doesNotMatch(combined, /local-control|local-outbound|sendLocalControlRequest|commit-file/u);
+});

@@ -1,0 +1,4 @@
+interface:
+  display_name: "微信安全发送文件"
+  short_description: "通过本地安全桥接校验、暂存并发送明确指定的工程文件"
+  default_prompt: "使用 $weixin-send-file 安全发送我明确指定的本地文件到微信。"

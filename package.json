@@ -14,7 +14,8 @@
     "verify:installed-sdk": "node scripts/verify-installed-sdk.mjs",
     "check": "node --test && node scripts/verify-installed-sdk.mjs",
     "weixin:login": "node src/cli.mjs login",
-    "weixin:start": "node src/cli.mjs run"
+    "weixin:start": "node src/cli.mjs run",
+    "weixin:files": "node src/file-transfer-cli.mjs"
   },
   "dependencies": {
     "weixin-agent-sdk": "0.5.0"

@@ -49,3 +49,44 @@ test("不同控制器之间不能复用准备对象", async (t) => {
   const prepared = await first.prepare({ text: "受控消息" });
   await assert.rejects(second.send(prepared), (error) => error.code === "UNPREPARED_OUTBOUND");
 });
+
+test("受控 outbox 中的 DWG 原文件按普通文件发送", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "weixin-safe-dwg-outbound-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const sent = [];
+  const controller = createOutboundController({
+    dataRoot: path.join(root, "data"),
+    transport: { async sendMessage(payload) { sent.push(payload); } },
+  });
+  await fs.mkdir(controller.outboxRoot, { recursive: true });
+  const file = path.join(controller.outboxRoot, "drawing.dwg");
+  await fs.writeFile(file, Buffer.concat([Buffer.from("AC1032", "ascii"), Buffer.alloc(58)]));
+
+  const prepared = await controller.prepare({ filePath: file, fileName: "drawing.dwg" });
+  await controller.send(prepared);
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].media.type, "file");
+  assert.equal(sent[0].media.fileName, "drawing.dwg");
+});
+
+test("出站文件在准备后被替换时拒绝发送", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "weixin-safe-outbound-revalidation-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const sent = [];
+  const controller = createOutboundController({
+    dataRoot: path.join(root, "data"),
+    transport: { async sendMessage(payload) { sent.push(payload); } },
+  });
+  await fs.mkdir(controller.outboxRoot, { recursive: true });
+  const file = path.join(controller.outboxRoot, "drawing.dwg");
+  await fs.writeFile(file, Buffer.concat([Buffer.from("AC1032", "ascii"), Buffer.alloc(58)]));
+  const prepared = await controller.prepare({ filePath: file, fileName: "drawing.dwg" });
+  await fs.writeFile(file, Buffer.concat([Buffer.from("AC1032", "ascii"), Buffer.alloc(57), Buffer.from("x")]));
+
+  await assert.rejects(
+    controller.send(prepared),
+    (error) => error.code === "OUTBOUND_FILE_CHANGED_AFTER_PREPARE",
+  );
+  assert.equal(sent.length, 0);
+});

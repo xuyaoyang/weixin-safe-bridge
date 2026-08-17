@@ -8,7 +8,18 @@
 - 微信入站附件必须来自允许的 SDK 临时目录，经路径、大小、扩展名、声明 MIME 和内容特征联合校验后才复制。
 - 入站处理始终返回空响应，不会自动回复，更不会把内容送给 Codex、模型、Shell 或其他工具。
 - 出站只暴露本地 `createOutboundController()` 接口。只有同一控制器 `prepare()` 生成的对象才能交给 `send()`；出站文件必须位于受控 `outbox`。
+- 本地文件发送采用随机令牌认证和两阶段单次批准；准备阶段不发送，批准五分钟失效且不可重放，真正上传前再次核对大小、类型和 SHA-256。
 - 审计日志只保存最小元数据、哈希、结果和拒绝码，不保存拒绝文本正文或完整来源标识。
+
+## 支持的文件类型
+
+文件类型必须指定并同时通过扩展名、内容特征和 MIME 一致性检查。当前支持：
+
+- 工程/CAD：DWG、DXF、STEP/STP、IFC、STL。
+- 文档与数据：PDF、DOCX、XLSX、PPTX、TXT、CSV、TSV、Markdown、JSON。
+- 媒体：PNG、JPEG、WEBP、TIFF、BMP、WAV、MP4。
+
+完全取消类型限制会让伪装扩展名、脚本、可执行文件、宏文档和通用压缩容器绕过检查，因此未知类型仍失败关闭。通用 ZIP、宏文档和可执行/脚本类型不在白名单中。
 
 ## 为什么包含 SDK 补丁
 
@@ -40,6 +51,7 @@ runtime-data/
   inbox/       # 已接受的入站文本、附件和 metadata.json
   outbox/      # 本地准备的可出站文件
   audit/       # JSONL 审计记录
+  local-control/ # 本机发送控制令牌；仅当前用户和 SYSTEM 可访问
   sdk-state/   # SDK 凭据和同步游标；不得提交
 ```
 
@@ -55,7 +67,11 @@ $env:WEIXIN_ENABLE_REAL_CONNECTION = '1'
 pnpm weixin:start -- --confirm-real-connection
 ```
 
-登录入口会把 SDK 状态定向到 `WEIXIN_BRIDGE_DATA_DIR\sdk-state`，不要求安装或运行 OpenClaw。运行入口只接收并落盘；不会自动回复。真实主动发送尚未提供通用 CLI，必须由本地受控程序显式构造 `createOutboundController()` 并调用，且应在单独授权的真实联调中验证。
+登录入口会把 SDK 状态定向到 `WEIXIN_BRIDGE_DATA_DIR\sdk-state`，不要求安装或运行 OpenClaw。运行入口只接收并落盘；不会自动回复。
+
+本地 `src/file-transfer-cli.mjs` 提供收件列表/导出和文件发送的准备/提交接口。发送准备不会外发；真实提交必须在用户本轮明确要求发送时同时提供一次性环境开关 `WEIXIN_ENABLE_REAL_SEND=1`、`--confirm-real-send` 参数和五分钟内的单次批准 ID。SDK 只会发给当前登录用户，且要求运行期间已收到消息以取得有效 `context_token`。本版本只完成假传输测试，真实文件主动发送仍需单独授权联调。
+
+本机 Codex Skills `weixin-receive-file` 和 `weixin-send-file` 固化了上述流程：收件 Skill 不读正文、不搜索其他目录；发件 Skill 只接受当前请求中明确给出的单个绝对路径，不自动重试或转发。
 
 ## Windows 登录后自动启动（可选）
 

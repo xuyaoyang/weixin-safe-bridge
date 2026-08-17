@@ -45,6 +45,14 @@ export function createOutboundController({ dataRoot, transport }) {
           mediaSha256: checkedFile?.sha256,
           mediaBytes: checkedFile?.byteLength,
         }),
+        fileCheck: checkedFile
+          ? Object.freeze({
+              filePath: path.resolve(filePath),
+              fileName: checkedFile.safeOriginalName,
+              sha256: checkedFile.sha256,
+              byteLength: checkedFile.byteLength,
+            })
+          : undefined,
       });
       preparedByThisController.add(prepared);
       return prepared;
@@ -52,6 +60,29 @@ export function createOutboundController({ dataRoot, transport }) {
     async send(prepared) {
       if (!prepared || typeof prepared !== "object" || !preparedByThisController.has(prepared)) {
         throw new PolicyError("UNPREPARED_OUTBOUND", "只能发送由同一控制器 prepare() 生成的对象");
+      }
+      if (prepared.fileCheck) {
+        try {
+          const rechecked = await inspectAllowedFile({
+            filePath: prepared.fileCheck.filePath,
+            fileName: prepared.fileCheck.fileName,
+            claimedMime: "application/octet-stream",
+            allowedRoots: [outboxRoot],
+          });
+          if (
+            rechecked.sha256 !== prepared.fileCheck.sha256 ||
+            rechecked.byteLength !== prepared.fileCheck.byteLength
+          ) {
+            throw new PolicyError("OUTBOUND_FILE_CHANGED_AFTER_PREPARE", "出站文件在批准后发生变化");
+          }
+        } catch (error) {
+          await audit.append({
+            event: "OUTBOUND_REJECTED",
+            ...prepared.audit,
+            reason: error instanceof PolicyError ? error.code : "OUTBOUND_REVALIDATION_FAILED",
+          });
+          throw error;
+        }
       }
       await audit.append({ event: "OUTBOUND_ATTEMPT", ...prepared.audit });
       try {

@@ -57,9 +57,18 @@ try {
 
   New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
   $logFile = Join-Path $logRoot ("bridge-" + (Get-Date -Format "yyyy-MM-dd") + ".log")
+  $controlRoot = Join-Path $dataRoot "local-control"
+  New-Item -ItemType Directory -Path $controlRoot -Force | Out-Null
+  $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $icacls = Join-Path $env:SystemRoot "System32\icacls.exe"
+  & $icacls $controlRoot /inheritance:r /grant:r "*${currentSid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to restrict the local-control directory ACL."
+  }
 
   $env:WEIXIN_BRIDGE_DATA_DIR = $dataRoot
   $env:WEIXIN_ENABLE_REAL_CONNECTION = "1"
+  $env:WEIXIN_ENABLE_LOCAL_OUTBOUND = "1"
 
   Push-Location $appRoot
   try {

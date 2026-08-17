@@ -10,6 +10,7 @@ import {
   sanitizeFilename,
   sha256,
   validateClaimedMime,
+  validateDetectedExtension,
 } from "./policy.mjs";
 
 export async function inspectAllowedFile({
@@ -70,6 +71,7 @@ export async function inspectAllowedFile({
 
     const safeOriginalName = sanitizeFilename(fileName ?? path.basename(realPath));
     const detected = detectAllowedFile(buffer, safeOriginalName);
+    validateDetectedExtension(safeOriginalName, detected.extension);
     const normalizedClaimedMime = validateClaimedMime(claimedMime, detected);
     return {
       buffer,

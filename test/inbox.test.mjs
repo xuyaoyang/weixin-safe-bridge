@@ -112,6 +112,23 @@ test("通用 ZIP 容器不会因文件名伪装为 Office 文档而通过", asyn
   assert.equal(result.reason, "UNSUPPORTED_ZIP_CONTAINER");
 });
 
+test("真实内容与扩展名不一致时失败关闭", async (t) => {
+  const { sourceRoot, store } = await fixture(t);
+  const disguised = path.join(sourceRoot, "fake.dwg");
+  await fs.writeFile(disguised, "%PDF-1.7\n%%EOF\n");
+  const result = await store.ingest({
+    conversationId: "source-5",
+    media: {
+      type: "file",
+      filePath: disguised,
+      fileName: "fake.dwg",
+      mimeType: "application/octet-stream",
+    },
+  });
+  assert.equal(result.status, "rejected");
+  assert.equal(result.reason, "FILE_EXTENSION_MISMATCH");
+});
+
 test("Agent 对接受或拒绝的入站消息都返回空对象", async (t) => {
   const { store } = await fixture(t);
   const agent = createInboxOnlyAgent(store);
