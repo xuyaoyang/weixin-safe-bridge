@@ -1,33 +1,81 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
-import { detectAllowedFile } from "../src/policy.mjs";
+import { inspectOpaqueFile } from "../src/file-policy.mjs";
 
-test("常用工程文件按扩展名和内容特征联合识别", () => {
+async function fixture(t) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "weixin-opaque-file-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+test("EXE、压缩包和扩展名不匹配文件均作为不透明普通文件接受", async (t) => {
+  const root = await fixture(t);
   const cases = [
-    [Buffer.concat([Buffer.from("AC1032", "ascii"), Buffer.alloc(58)]), "drawing.dwg", ".dwg", "application/vnd.dwg"],
-    [Buffer.from("0\r\nSECTION\r\n2\r\nHEADER\r\n0\r\nEOF\r\n", "ascii"), "drawing.dxf", ".dxf", "application/dxf"],
-    [Buffer.from("ISO-10303-21;\nHEADER;\nENDSEC;\nEND-ISO-10303-21;\n", "ascii"), "part.step", ".step", "model/step"],
-    [Buffer.from("ISO-10303-21;\nHEADER;\nENDSEC;\nEND-ISO-10303-21;\n", "ascii"), "model.ifc", ".ifc", "application/ifc"],
-    [Buffer.from("solid part\nfacet normal 0 0 1\nendfacet\nendsolid part\n", "ascii"), "part.stl", ".stl", "model/stl"],
-    [Buffer.from("name,value\n阻尼器,1\n", "utf8"), "data.csv", ".csv", "text/csv"],
-    [Buffer.from("# 试验记录\n", "utf8"), "record.md", ".md", "text/markdown"],
-    [Buffer.from('{"status":"ok"}\n', "utf8"), "data.json", ".json", "application/json"],
-    [Buffer.from("PK\x03\x04[Content_Types].xml ppt/slides/slide1.xml", "binary"), "slides.pptx", ".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ["tool.exe", Buffer.from("MZ-not-executed", "ascii"), "application/x-msdownload"],
+    ["bundle.zip", Buffer.from([0x50, 0x4b, 0x03, 0x04]), "application/zip"],
+    ["opaque.dwg", Buffer.from("not-cad-content", "utf8"), "application/octet-stream"],
+    ["archive.7z", Buffer.from("7z-data", "utf8"), "application/x-7z-compressed"],
   ];
 
-  for (const [buffer, filename, extension, mimeType] of cases) {
-    assert.deepEqual(detectAllowedFile(buffer, filename), { extension, mimeType }, filename);
+  for (const [fileName, content, mimeType] of cases) {
+    const filePath = path.join(root, fileName);
+    await fs.writeFile(filePath, content);
+    const inspected = await inspectOpaqueFile({
+      filePath,
+      fileName,
+      claimedMime: mimeType,
+      allowedRoots: [root],
+    });
+    assert.equal(inspected.safeOriginalName, fileName);
+    assert.equal(inspected.byteLength, content.length);
+    assert.equal(inspected.mimeType, mimeType);
+    assert.equal(inspected.transportMode, "opaque");
   }
 });
 
-test("DWG 扩展名不能替代内容特征，宏文档仍失败关闭", () => {
-  assert.throws(
-    () => detectAllowedFile(Buffer.from("not a drawing", "utf8"), "fake.dwg"),
-    (error) => error.code === "UNSUPPORTED_FILE_TYPE",
+test("程序不再对普通文件应用 25 MiB 默认上限", async (t) => {
+  const root = await fixture(t);
+  const filePath = path.join(root, "large.bin");
+  const handle = await fs.open(filePath, "wx");
+  try {
+    await handle.truncate(26 * 1024 * 1024);
+  } finally {
+    await handle.close();
+  }
+
+  const inspected = await inspectOpaqueFile({
+    filePath,
+    fileName: "large.bin",
+    claimedMime: "application/octet-stream",
+    allowedRoots: [root],
+  });
+  assert.equal(inspected.byteLength, 26 * 1024 * 1024);
+});
+
+test("目录、越界路径和可选调用方大小上限仍被拒绝", async (t) => {
+  const root = await fixture(t);
+  const allowed = path.join(root, "allowed");
+  await fs.mkdir(allowed);
+  const outside = path.join(root, "outside.bin");
+  await fs.writeFile(outside, "x");
+
+  await assert.rejects(
+    inspectOpaqueFile({ filePath: outside, allowedRoots: [allowed] }),
+    (error) => error.code === "FILE_PATH_OUTSIDE_ALLOWED_ROOT",
   );
-  assert.throws(
-    () => detectAllowedFile(Buffer.from("PK\x03\x04[Content_Types].xml word/document.xml", "binary"), "macro.docm"),
-    (error) => error.code === "BLOCKED_FILE_EXTENSION",
+  await assert.rejects(
+    inspectOpaqueFile({ filePath: allowed, allowedRoots: [allowed] }),
+    (error) => error.code === "NOT_A_REGULAR_FILE",
+  );
+
+  const limited = path.join(allowed, "limited.bin");
+  await fs.writeFile(limited, "12");
+  await assert.rejects(
+    inspectOpaqueFile({ filePath: limited, allowedRoots: [allowed], maxBytes: 1 }),
+    (error) => error.code === "FILE_SIZE_REJECTED",
   );
 });

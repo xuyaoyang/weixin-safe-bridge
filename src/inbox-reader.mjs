@@ -1,7 +1,8 @@
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { PolicyError, assertPathWithinRoot, sanitizeFilename, sha256 } from "./policy.mjs";
+import { PolicyError, assertPathWithinRoot, sanitizeFilename } from "./policy.mjs";
 
 const RECEIPT_REF = /^\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}$/u;
 
@@ -40,8 +41,8 @@ export async function listInboxReceipts(dataRoot, { limit = 10 } = {}) {
             ? {
                 fileName: metadata.media.safeOriginalName,
                 byteLength: metadata.media.byteLength,
-                sha256: metadata.media.sha256,
-                detectedMime: metadata.media.detectedMime,
+                mimeType: metadata.media.mimeType ?? metadata.media.detectedMime ?? "application/octet-stream",
+                transportMode: metadata.media.transportMode ?? "legacy-validated",
               }
             : undefined,
         });
@@ -78,18 +79,24 @@ export async function exportInboxAttachment(dataRoot, receiptRef, destinationDir
   if (!destinationStats.isDirectory()) {
     throw new PolicyError("EXPORT_DESTINATION_NOT_DIRECTORY", "导出目标必须是已存在目录");
   }
-  const buffer = await fs.readFile(sourcePath);
-  if (buffer.length !== metadata.media.byteLength || sha256(buffer) !== metadata.media.sha256) {
-    throw new PolicyError("INBOX_ATTACHMENT_INTEGRITY_FAILED", "收件附件完整性校验失败");
+  if (sourceStats.size !== metadata.media.byteLength) {
+    throw new PolicyError("INBOX_ATTACHMENT_SIZE_CHANGED", "收件附件大小与收据不一致");
   }
   const fileName = sanitizeFilename(metadata.media.safeOriginalName);
   const destinationPath = path.join(path.resolve(destinationDirectory), fileName);
-  await fs.writeFile(destinationPath, buffer, { flag: "wx", mode: 0o600 });
+  await fs.copyFile(sourcePath, destinationPath, fsConstants.COPYFILE_EXCL);
+  await fs.chmod(destinationPath, 0o600);
+  const copiedStats = await fs.stat(destinationPath);
+  if (!copiedStats.isFile() || copiedStats.size !== sourceStats.size) {
+    await fs.rm(destinationPath, { force: true });
+    throw new PolicyError("INBOX_EXPORT_COPY_INCOMPLETE", "附件导出复制不完整");
+  }
   return {
     receiptRef,
     destinationPath,
     fileName,
-    byteLength: buffer.length,
-    sha256: metadata.media.sha256,
+    byteLength: copiedStats.size,
+    mimeType: metadata.media.mimeType ?? metadata.media.detectedMime ?? "application/octet-stream",
+    transportMode: metadata.media.transportMode ?? "legacy-validated",
   };
 }

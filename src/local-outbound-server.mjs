@@ -71,7 +71,6 @@ export async function createLocalOutboundServer({
         expiresAt: new Date(expiresAtMs).toISOString(),
         fileName: prepared.payload.media.fileName,
         byteLength: prepared.audit.mediaBytes,
-        sha256: prepared.audit.mediaSha256,
       };
     }
 

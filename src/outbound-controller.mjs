@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { AuditLog } from "./audit-log.mjs";
-import { inspectAllowedFile } from "./file-policy.mjs";
+import { inspectOpaqueFile, sameFileState } from "./file-policy.mjs";
 import { PolicyError, validateOutboundText } from "./policy.mjs";
 
 export function createOutboundController({ dataRoot, transport }) {
@@ -18,7 +18,7 @@ export function createOutboundController({ dataRoot, transport }) {
     async prepare({ text, filePath, fileName } = {}) {
       const checkedText = validateOutboundText(text);
       const checkedFile = filePath
-        ? await inspectAllowedFile({
+        ? await inspectOpaqueFile({
             filePath,
             fileName,
             claimedMime: "application/octet-stream",
@@ -32,7 +32,7 @@ export function createOutboundController({ dataRoot, transport }) {
         text: checkedText?.text,
         media: checkedFile
           ? Object.freeze({
-              type: checkedFile.detectedMime.startsWith("image/") ? "image" : "file",
+              type: "file",
               url: path.resolve(filePath),
               fileName: checkedFile.safeOriginalName,
             })
@@ -42,15 +42,13 @@ export function createOutboundController({ dataRoot, transport }) {
         payload,
         audit: Object.freeze({
           textSha256: checkedText?.sha256,
-          mediaSha256: checkedFile?.sha256,
           mediaBytes: checkedFile?.byteLength,
         }),
         fileCheck: checkedFile
           ? Object.freeze({
               filePath: path.resolve(filePath),
               fileName: checkedFile.safeOriginalName,
-              sha256: checkedFile.sha256,
-              byteLength: checkedFile.byteLength,
+              state: checkedFile.state,
             })
           : undefined,
       });
@@ -63,16 +61,13 @@ export function createOutboundController({ dataRoot, transport }) {
       }
       if (prepared.fileCheck) {
         try {
-          const rechecked = await inspectAllowedFile({
+          const rechecked = await inspectOpaqueFile({
             filePath: prepared.fileCheck.filePath,
             fileName: prepared.fileCheck.fileName,
             claimedMime: "application/octet-stream",
             allowedRoots: [outboxRoot],
           });
-          if (
-            rechecked.sha256 !== prepared.fileCheck.sha256 ||
-            rechecked.byteLength !== prepared.fileCheck.byteLength
-          ) {
+          if (!sameFileState(rechecked.state, prepared.fileCheck.state)) {
             throw new PolicyError("OUTBOUND_FILE_CHANGED_AFTER_PREPARE", "出站文件在批准后发生变化");
           }
         } catch (error) {

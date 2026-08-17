@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import { AuditLog } from "./audit-log.mjs";
-import { inspectAllowedFile } from "./file-policy.mjs";
+import { inspectOpaqueFile } from "./file-policy.mjs";
 import { PolicyError, sha256, validateInboundText, validateSourceId } from "./policy.mjs";
 
 function errorCode(error) {
@@ -29,7 +30,7 @@ export class InboxStore {
         ? validateInboundText(request.text)
         : { text: "", byteLength: 0, sha256: sha256(Buffer.alloc(0)) };
       const mediaResult = request?.media
-        ? await inspectAllowedFile({
+        ? await inspectOpaqueFile({
             filePath: request.media.filePath,
             fileName: request.media.fileName,
             claimedMime: request.media.mimeType,
@@ -46,11 +47,14 @@ export class InboxStore {
       const dayDirectory = path.join(this.inboxRoot, day);
       const finalDirectory = path.join(dayDirectory, messageId);
       const partialDirectory = path.join(dayDirectory, `.partial-${messageId}`);
+      const storedAttachmentName = mediaResult
+        ? `attachment${mediaResult.extension}`
+        : undefined;
       await fs.mkdir(dayDirectory, { recursive: true, mode: 0o700 });
       await fs.mkdir(partialDirectory, { recursive: false, mode: 0o700 });
 
       const metadata = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         messageId,
         receivedAt,
         sourceRef,
@@ -64,13 +68,11 @@ export class InboxStore {
           : undefined,
         media: mediaResult
           ? {
-              storedPath: `attachment${mediaResult.extension}`,
+              storedPath: storedAttachmentName,
               safeOriginalName: mediaResult.safeOriginalName,
               byteLength: mediaResult.byteLength,
-              sha256: mediaResult.sha256,
-              claimedMime: mediaResult.claimedMime,
-              detectedMime: mediaResult.detectedMime,
-              sourcePathRef: mediaResult.sourcePathRef,
+              mimeType: mediaResult.mimeType,
+              transportMode: mediaResult.transportMode,
             }
           : undefined,
       };
@@ -84,11 +86,13 @@ export class InboxStore {
           });
         }
         if (mediaResult) {
-          await fs.writeFile(
-            path.join(partialDirectory, `attachment${mediaResult.extension}`),
-            mediaResult.buffer,
-            { flag: "wx", mode: 0o600 },
-          );
+          const storedPath = path.join(partialDirectory, storedAttachmentName);
+          await fs.copyFile(mediaResult.realPath, storedPath, fsConstants.COPYFILE_EXCL);
+          const copiedStats = await fs.stat(storedPath);
+          if (!copiedStats.isFile() || copiedStats.size !== mediaResult.byteLength) {
+            throw new PolicyError("FILE_CHANGED_DURING_COPY", "附件复制期间大小发生变化");
+          }
+          await fs.chmod(storedPath, 0o600);
         }
         await fs.writeFile(
           path.join(partialDirectory, "metadata.json"),
@@ -108,7 +112,7 @@ export class InboxStore {
         hasText: Boolean(textResult.text),
         hasMedia: Boolean(mediaResult),
         textSha256: textResult.text ? textResult.sha256 : undefined,
-        mediaSha256: mediaResult?.sha256,
+        mediaBytes: mediaResult?.byteLength,
       });
       return { status: "accepted", messageId, directory: finalDirectory, metadata };
     } catch (error) {

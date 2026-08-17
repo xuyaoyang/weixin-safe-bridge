@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { inspectAllowedFile } from "./file-policy.mjs";
+import { inspectOpaqueFile, sameFileState } from "./file-policy.mjs";
 import { exportInboxAttachment, listInboxReceipts } from "./inbox-reader.mjs";
 import { sendLocalControlRequest } from "./local-control-client.mjs";
 import { PolicyError } from "./policy.mjs";
@@ -41,7 +42,7 @@ function rejectUnknownOptions(options, allowed) {
 async function stageAndPrepare(dataRoot, options) {
   rejectUnknownOptions(options, new Set(["--file", "--text"]));
   const requestedPath = path.resolve(required(options, "--file"));
-  const checked = await inspectAllowedFile({
+  const checked = await inspectOpaqueFile({
     filePath: requestedPath,
     fileName: path.basename(requestedPath),
     claimedMime: "application/octet-stream",
@@ -51,22 +52,37 @@ async function stageAndPrepare(dataRoot, options) {
   const stageRoot = path.join(outboxRoot, "staged", randomUUID());
   await fs.mkdir(stageRoot, { recursive: true, mode: 0o700 });
   const stagedPath = path.join(stageRoot, checked.safeOriginalName);
-  await fs.writeFile(stagedPath, checked.buffer, { flag: "wx", mode: 0o600 });
-  const response = await sendLocalControlRequest(dataRoot, {
-    operation: "prepare-file",
-    filePath: stagedPath,
-    fileName: checked.safeOriginalName,
-    text: options.get("--text"),
-  });
-  return {
-    operation: "prepared",
-    approvalId: response.approvalId,
-    expiresAt: response.expiresAt,
-    fileName: response.fileName,
-    byteLength: response.byteLength,
-    sha256: response.sha256,
-    detectedMime: checked.detectedMime,
-  };
+  try {
+    await fs.copyFile(checked.realPath, stagedPath, fsConstants.COPYFILE_EXCL);
+    await fs.chmod(stagedPath, 0o600);
+    const sourceAfterCopy = await inspectOpaqueFile({
+      filePath: requestedPath,
+      fileName: checked.safeOriginalName,
+      claimedMime: checked.mimeType,
+      allowedRoots: [path.dirname(requestedPath)],
+    });
+    if (!sameFileState(sourceAfterCopy.state, checked.state)) {
+      throw new PolicyError("FILE_CHANGED_DURING_COPY", "文件在暂存期间发生变化");
+    }
+    const response = await sendLocalControlRequest(dataRoot, {
+      operation: "prepare-file",
+      filePath: stagedPath,
+      fileName: checked.safeOriginalName,
+      text: options.get("--text"),
+    });
+    return {
+      operation: "prepared",
+      approvalId: response.approvalId,
+      expiresAt: response.expiresAt,
+      fileName: response.fileName,
+      byteLength: response.byteLength,
+      mimeType: checked.mimeType,
+      transportMode: checked.transportMode,
+    };
+  } catch (error) {
+    await fs.rm(stageRoot, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 async function commitSend(dataRoot, options) {

@@ -3,28 +3,49 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  DEFAULT_MAX_FILE_BYTES,
   PolicyError,
   assertPathWithinRoot,
-  detectAllowedFile,
+  normalizeTransportMime,
   sanitizeFilename,
-  sha256,
-  validateClaimedMime,
-  validateDetectedExtension,
 } from "./policy.mjs";
 
-export async function inspectAllowedFile({
+function fileState(stats) {
+  return Object.freeze({
+    byteLength: stats.size,
+    device: String(stats.dev),
+    inode: String(stats.ino),
+    modifiedMs: stats.mtimeMs,
+    changedMs: stats.ctimeMs,
+  });
+}
+
+export function sameFileState(left, right) {
+  return Boolean(
+    left &&
+      right &&
+      left.byteLength === right.byteLength &&
+      left.device === right.device &&
+      left.inode === right.inode &&
+      left.modifiedMs === right.modifiedMs &&
+      left.changedMs === right.changedMs,
+  );
+}
+
+export async function inspectOpaqueFile({
   filePath,
   fileName,
   claimedMime,
   allowedRoots,
-  maxBytes = DEFAULT_MAX_FILE_BYTES,
+  maxBytes,
 }) {
   if (typeof filePath !== "string" || filePath.includes("\0") || /^https?:\/\//iu.test(filePath)) {
     throw new PolicyError("INVALID_FILE_PATH", "文件路径为空、包含 NUL 或是远程 URL");
   }
   if (!Array.isArray(allowedRoots) || allowedRoots.length === 0) {
     throw new PolicyError("NO_ALLOWED_FILE_ROOT", "未配置允许的文件来源目录");
+  }
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
+    throw new PolicyError("INVALID_FILE_SIZE_LIMIT", "文件大小限制必须是非负安全整数");
   }
 
   const resolvedAllowedRoots = allowedRoots.map((root) => path.resolve(root));
@@ -61,28 +82,23 @@ export async function inspectAllowedFile({
   try {
     const stats = await handle.stat();
     if (!stats.isFile()) throw new PolicyError("NOT_A_REGULAR_FILE", "输入不是普通文件");
-    if (stats.size <= 0 || stats.size > maxBytes) {
-      throw new PolicyError("FILE_SIZE_REJECTED", `文件为空或超过 ${maxBytes} 字节限制`);
+    if (!Number.isSafeInteger(stats.size) || stats.size < 0) {
+      throw new PolicyError("INVALID_FILE_SIZE", "文件大小不是安全整数");
     }
-    const buffer = await handle.readFile();
-    if (buffer.length !== stats.size) {
-      throw new PolicyError("FILE_CHANGED_DURING_READ", "文件读取期间大小发生变化");
+    if (maxBytes !== undefined && stats.size > maxBytes) {
+      throw new PolicyError("FILE_SIZE_REJECTED", `文件超过 ${maxBytes} 字节限制`);
     }
 
     const safeOriginalName = sanitizeFilename(fileName ?? path.basename(realPath));
-    const detected = detectAllowedFile(buffer, safeOriginalName);
-    validateDetectedExtension(safeOriginalName, detected.extension);
-    const normalizedClaimedMime = validateClaimedMime(claimedMime, detected);
-    return {
-      buffer,
-      byteLength: buffer.length,
-      sha256: sha256(buffer),
-      detectedMime: detected.mimeType,
-      claimedMime: normalizedClaimedMime,
-      extension: detected.extension,
+    return Object.freeze({
+      realPath,
+      byteLength: stats.size,
+      mimeType: normalizeTransportMime(claimedMime),
+      extension: path.extname(safeOriginalName).toLowerCase(),
       safeOriginalName,
-      sourcePathRef: `sha256:${sha256(Buffer.from(realPath, "utf8"))}`,
-    };
+      state: fileState(stats),
+      transportMode: "opaque",
+    });
   } finally {
     await handle.close();
   }

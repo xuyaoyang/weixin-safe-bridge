@@ -47,7 +47,7 @@ test("普通文本落入独立消息目录并最小化来源元数据", async (t
   assert.doesNotMatch(metadataText, /user@example/u);
 });
 
-test("允许目录内的 PDF 通过内容和 MIME 联合校验后复制", async (t) => {
+test("允许目录内的文件不读取内容、不做类型匹配并复制", async (t) => {
   const { sourceRoot, store } = await fixture(t);
   const sourceFile = path.join(sourceRoot, "incoming.pdf");
   const content = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n", "ascii");
@@ -66,12 +66,14 @@ test("允许目录内的 PDF 通过内容和 MIME 联合校验后复制", async 
 
   assert.equal(result.status, "accepted");
   assert.deepEqual(await fs.readFile(path.join(result.directory, "attachment.pdf")), content);
-  assert.equal(result.metadata.media.detectedMime, "application/pdf");
+  assert.equal(result.metadata.media.mimeType, "application/pdf");
+  assert.equal(result.metadata.media.transportMode, "opaque");
   assert.equal(result.metadata.media.safeOriginalName, "项目报告.pdf");
   assert.doesNotMatch(JSON.stringify(result.metadata), /sdk-inbound/u);
+  assert.equal(result.metadata.media.sha256, undefined);
 });
 
-test("越界附件和脚本附件都失败关闭", async (t) => {
+test("越界附件失败关闭，但脚本和可执行扩展名作为不透明文件落盘", async (t) => {
   const { root, sourceRoot, store } = await fixture(t);
   const outside = path.join(root, "outside.pdf");
   await fs.writeFile(outside, "%PDF-1.7\n%%EOF\n");
@@ -90,11 +92,12 @@ test("越界附件和脚本附件都失败关闭", async (t) => {
     text: "普通文字",
     media: { type: "file", filePath: script, fileName: "run.ps1", mimeType: "text/plain" },
   });
-  assert.equal(scriptResult.status, "rejected");
-  assert.equal(scriptResult.reason, "BLOCKED_FILE_EXTENSION");
+  assert.equal(scriptResult.status, "accepted");
+  assert.equal(scriptResult.metadata.media.safeOriginalName, "run.ps1");
+  assert.equal(await fs.readFile(path.join(scriptResult.directory, "attachment.ps1"), "utf8"), "Get-ChildItem\n");
 });
 
-test("通用 ZIP 容器不会因文件名伪装为 Office 文档而通过", async (t) => {
+test("通用 ZIP 和伪装扩展名不做内容审查，均作为不透明文件保存", async (t) => {
   const { sourceRoot, store } = await fixture(t);
   const disguised = path.join(sourceRoot, "fake.docx");
   await fs.writeFile(disguised, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]));
@@ -108,11 +111,12 @@ test("通用 ZIP 容器不会因文件名伪装为 Office 文档而通过", asyn
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     },
   });
-  assert.equal(result.status, "rejected");
-  assert.equal(result.reason, "UNSUPPORTED_ZIP_CONTAINER");
+  assert.equal(result.status, "accepted");
+  assert.equal(result.metadata.media.safeOriginalName, "fake.docx");
+  assert.equal(result.metadata.media.transportMode, "opaque");
 });
 
-test("真实内容与扩展名不一致时失败关闭", async (t) => {
+test("真实内容与扩展名不一致时仍按原文件名传输", async (t) => {
   const { sourceRoot, store } = await fixture(t);
   const disguised = path.join(sourceRoot, "fake.dwg");
   await fs.writeFile(disguised, "%PDF-1.7\n%%EOF\n");
@@ -125,8 +129,9 @@ test("真实内容与扩展名不一致时失败关闭", async (t) => {
       mimeType: "application/octet-stream",
     },
   });
-  assert.equal(result.status, "rejected");
-  assert.equal(result.reason, "FILE_EXTENSION_MISMATCH");
+  assert.equal(result.status, "accepted");
+  assert.equal(result.metadata.media.safeOriginalName, "fake.dwg");
+  assert.equal(await fs.readFile(path.join(result.directory, "attachment.dwg"), "utf8"), "%PDF-1.7\n%%EOF\n");
 });
 
 test("Agent 对接受或拒绝的入站消息都返回空对象", async (t) => {

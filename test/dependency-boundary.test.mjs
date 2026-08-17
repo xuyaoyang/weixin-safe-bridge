@@ -17,11 +17,13 @@ test("SDK 使用精确版本并声明安全补丁", async () => {
   assert.match(workspaceConfig, /^ignoreScripts:\s+true\s*$/mu);
 });
 
-test("补丁删除斜杠命令调用和所有入站触发外发分支", async () => {
+test("补丁删除 SDK 入站大小硬限制、斜杠命令和所有入站触发外发分支", async () => {
   const patchText = await fs.readFile(
     path.join(projectRoot, "patches", "weixin-agent-sdk@0.5.0.patch"),
     "utf8",
   );
+  assert.match(patchText, /^-const WEIXIN_MEDIA_MAX_BYTES = 100 \* 1024 \* 1024;$/mu);
+  assert.match(patchText, /^\+const WEIXIN_MEDIA_MAX_BYTES = Number\.MAX_SAFE_INTEGER;$/mu);
   assert.match(patchText, /^-\s*if \(textBody\.startsWith\("\/"\)\)/mu);
   assert.match(patchText, /^-\s*if \(response\.media\)/mu);
   assert.match(patchText, /^-\s*sendWeixinErrorNotice\(/mu);

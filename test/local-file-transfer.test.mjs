@@ -41,6 +41,7 @@ test("本地出站采用短时单次批准，准备阶段不会发送", async (t
   });
   assert.equal(prepared.operation, "prepared");
   assert.equal(prepared.fileName, "drawing.dwg");
+  assert.equal(prepared.sha256, undefined);
   assert.equal(sent.length, 0);
 
   await assert.rejects(
@@ -101,6 +102,8 @@ test("收件查询只返回最小元数据，并按精确引用无覆盖导出",
   const receipts = await listInboxReceipts(dataRoot);
   assert.equal(receipts.length, 1);
   assert.equal(receipts[0].media.fileName, "drawing.dwg");
+  assert.equal(receipts[0].media.sha256, undefined);
+  assert.equal(receipts[0].media.transportMode, "opaque");
   assert.doesNotMatch(JSON.stringify(receipts), /source@example|sdk-inbound/u);
 
   const exported = await exportInboxAttachment(dataRoot, receipts[0].receiptRef, destination);

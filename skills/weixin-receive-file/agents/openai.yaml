@@ -1,4 +1,4 @@
 interface:
-  display_name: "微信安全接收文件"
-  short_description: "查看受控微信收件箱并导出明确选择的附件且不读取正文"
-  default_prompt: "使用 $weixin-receive-file 查看并导出微信安全桥接收到的文件。"
+  display_name: "微信接收文件"
+  short_description: "查看受控微信收件箱并导出明确选择的任意普通文件"
+  default_prompt: "使用 $weixin-receive-file 查看并导出微信桥接收到的文件。"
