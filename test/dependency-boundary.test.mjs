@@ -31,6 +31,11 @@ test("补丁删除 SDK 入站大小硬限制、斜杠命令和所有入站触发
   assert.match(patchText, /^\+const CONTEXT_TOKEN_MAX_AGE_MS = 23 \* 60 \* 60 \* 1e3;$/mu);
   assert.match(patchText, /^\+\s*const persisted = freshContextTokenRecords\(\)/mu);
   assert.match(patchText, /^\+\s*fs\.writeFileSync\(tempPath,/mu);
+  assert.match(patchText, /^\+\s*"iLink-App-Id": "bot",$/mu);
+  assert.match(patchText, /^\+\s*"iLink-App-ClientVersion": "132102",$/mu);
+  assert.match(patchText, /^\+function notifyStart\(params\)/mu);
+  assert.match(patchText, /^\+function notifyStop\(params\)/mu);
+  assert.match(patchText, /^\+\s*const startResult = await notifyStart/mu);
 });
 
 test("入站处理模块不引用本地发送控制面", async () => {

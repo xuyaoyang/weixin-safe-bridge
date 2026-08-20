@@ -1,6 +1,6 @@
 {
   "name": "weixin-safe-bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "极简、受控的微信文本与不透明文件桥接程序",
   "type": "module",

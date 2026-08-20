@@ -1,8 +1,46 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c935fa4..a398635 100644
+index c935fa4..0f0edcf 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -1058,3 +1058,4 @@ async function uploadFileAttachmentToWeixin(params) {
+@@ -343 +343,4 @@ function buildBaseInfo() {
+-	return { channel_version: CHANNEL_VERSION };
++	return {
++		channel_version: CHANNEL_VERSION,
++		bot_agent: "WeixinSafeBridge/0.3.1"
++	};
+@@ -369,0 +373,2 @@ function buildHeaders(opts) {
++		"iLink-App-Id": "bot",
++		"iLink-App-ClientVersion": "132102",
+@@ -478 +483,27 @@ async function getUpdates(params) {
+-}
++}
++async function notifyOnlineState(params) {
++	const rawText = await apiFetch({
++		baseUrl: params.baseUrl,
++		endpoint: params.endpoint,
++		body: JSON.stringify({ base_info: buildBaseInfo() }),
++		token: params.token,
++		timeoutMs: DEFAULT_CONFIG_TIMEOUT_MS,
++		label: params.label,
++		abortSignal: params.abortSignal
++	});
++	return JSON.parse(rawText);
++}
++function notifyStart(params) {
++	return notifyOnlineState({
++		...params,
++		endpoint: "ilink/bot/msg/notifystart",
++		label: "notifyStart"
++	});
++}
++function notifyStop(params) {
++	return notifyOnlineState({
++		...params,
++		endpoint: "ilink/bot/msg/notifystop",
++		label: "notifyStop"
++	});
++}
+@@ -1058,3 +1089,4 @@ async function uploadFileAttachmentToWeixin(params) {
 -* be echoed verbatim in every outbound send. It is not persisted: the monitor
 -* loop populates this map on each inbound message, and the outbound adapter
 -* reads it back when the agent sends a reply.
@@ -10,12 +48,12 @@ index c935fa4..a398635 100644
 +* each account+user pair so a process restart does not discard a still-valid
 +* proactive-send context. The token file remains SDK state and must be treated
 +* like account credentials.
-@@ -1062,0 +1064,4 @@ const contextTokenStore = /* @__PURE__ */ new Map();
+@@ -1061,0 +1094,4 @@ async function uploadFileAttachmentToWeixin(params) {
 +const CONTEXT_TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1e3;
 +function resolveContextTokenPath() {
 +	return path.join(resolveWeixinStateDir(), "context-tokens.json");
 +}
-@@ -1065,0 +1071,40 @@ function contextTokenKey(accountId, userId) {
+@@ -1064,0 +1101,40 @@ function contextTokenKey(accountId, userId) {
 +function readPersistedContextTokens() {
 +	try {
 +		const parsed = JSON.parse(fs.readFileSync(resolveContextTokenPath(), "utf8"));
@@ -56,7 +94,7 @@ index c935fa4..a398635 100644
 +	}
 +	return fresh;
 +}
-@@ -1070,0 +1116,13 @@ function setContextToken(accountId, userId, token) {
+@@ -1069,0 +1146,13 @@ function setContextToken(accountId, userId, token) {
 +	const now = Date.now();
 +	const records = freshContextTokenRecords(now).filter((record) => contextTokenKey(record.accountId, record.userId) !== k);
 +	records.push({
@@ -70,20 +108,20 @@ index c935fa4..a398635 100644
 +	} catch (err) {
 +		logger.warn(`context token persistence failed: ${err instanceof Error ? err.message : String(err)}`);
 +	}
-@@ -1075 +1133,4 @@ function getContextToken(accountId, userId) {
+@@ -1075 +1164,4 @@ function getContextToken(accountId, userId) {
 -	const val = contextTokenStore.get(k);
 +	const persisted = freshContextTokenRecords().find((record) => contextTokenKey(record.accountId, record.userId) === k);
 +	if (persisted) contextTokenStore.set(k, persisted.token);
 +	else contextTokenStore.delete(k);
 +	const val = persisted?.token;
-@@ -1586 +1647 @@ async function silkToWav(silkBuf) {
+@@ -1586 +1678 @@ async function silkToWav(silkBuf) {
 -const WEIXIN_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
 +const WEIXIN_MEDIA_MAX_BYTES = Number.MAX_SAFE_INTEGER;
-@@ -1815,2 +1876 @@ function findMediaItem(itemList) {
+@@ -1815,2 +1907 @@ function findMediaItem(itemList) {
 -* Process a single inbound message:
 -*   slash command check → download media → call agent → send reply.
 +* Process a single inbound message without inbound-triggered commands or replies.
-@@ -1819,15 +1878,0 @@ async function processOneMessage(full, deps) {
+@@ -1819,15 +1909,0 @@ async function processOneMessage(full, deps) {
 -	const receivedAt = Date.now();
 -	const textBody = extractTextBody(full.item_list);
 -	if (textBody.startsWith("/")) {
@@ -99,7 +137,7 @@ index c935fa4..a398635 100644
 -			onClear: () => deps.agent.clearSession?.(conversationId)
 -		}, receivedAt, full.create_time_ms)).handled) return;
 -	}
-@@ -1874,18 +1918,0 @@ async function processOneMessage(full, deps) {
+@@ -1874,18 +1949,0 @@ async function processOneMessage(full, deps) {
 -	const to = full.from_user_id ?? "";
 -	let typingTimer;
 -	const startTyping = () => {
@@ -118,7 +156,7 @@ index c935fa4..a398635 100644
 -		startTyping();
 -		typingTimer = setInterval(startTyping, 1e4);
 -	}
-@@ -1893,26 +1920 @@ async function processOneMessage(full, deps) {
+@@ -1893,26 +1951 @@ async function processOneMessage(full, deps) {
 -		const response = await deps.agent.chat(request);
 -		if (response.media) {
 -			let filePath;
@@ -146,7 +184,7 @@ index c935fa4..a398635 100644
 -			}
 -		});
 +		await deps.agent.chat(request);
-@@ -1920,20 +1922 @@ async function processOneMessage(full, deps) {
+@@ -1920,20 +1953 @@ async function processOneMessage(full, deps) {
 -		logger.error(`processOneMessage: agent or send failed: ${err instanceof Error ? err.stack ?? err.message : JSON.stringify(err)}`);
 -		sendWeixinErrorNotice({
 -			to,
@@ -168,3 +206,24 @@ index c935fa4..a398635 100644
 -			}
 -		}).catch(() => {});
 +		logger.error(`processOneMessage: inbound storage failed: ${err instanceof Error ? err.stack ?? err.message : JSON.stringify(err)}`);
+@@ -2009,0 +2024,8 @@ async function monitorWeixinProvider(opts) {
++	try {
++		const startResult = await notifyStart({ baseUrl, token, abortSignal });
++		if (startResult.ret !== void 0 && startResult.ret !== 0 || startResult.errcode !== void 0 && startResult.errcode !== 0) {
++			errLog(`[weixin] notifyStart rejected: ret=${startResult.ret} errcode=${startResult.errcode}`);
++		} else aLog.info(`notifyStart accepted`);
++	} catch (err) {
++		errLog(`[weixin] notifyStart error: ${String(err)}`);
++	}
+@@ -2071 +2093 @@ async function monitorWeixinProvider(opts) {
+-			return;
++			break;
+@@ -2079,0 +2102,8 @@ async function monitorWeixinProvider(opts) {
++	try {
++		const stopResult = await notifyStop({ baseUrl, token });
++		if (stopResult.ret !== void 0 && stopResult.ret !== 0 || stopResult.errcode !== void 0 && stopResult.errcode !== 0) {
++			errLog(`[weixin] notifyStop rejected: ret=${stopResult.ret} errcode=${stopResult.errcode}`);
++		} else aLog.info(`notifyStop accepted`);
++	} catch (err) {
++		errLog(`[weixin] notifyStop error: ${String(err)}`);
++	}

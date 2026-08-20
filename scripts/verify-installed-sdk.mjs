@@ -10,6 +10,13 @@ for (const required of [
   "const CONTEXT_TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1e3;",
   "function writePersistedContextTokens(records)",
   "const persisted = freshContextTokenRecords().find",
+  '"iLink-App-Id": "bot"',
+  '"iLink-App-ClientVersion": "132102"',
+  'bot_agent: "WeixinSafeBridge/0.3.1"',
+  "function notifyStart(params)",
+  "function notifyStop(params)",
+  "const startResult = await notifyStart({ baseUrl, token, abortSignal });",
+  "\n}\nasync function notifyOnlineState(params)",
 ]) {
   if (!bundle.includes(required)) {
     throw new Error(`已安装 SDK 缺少会话令牌持久化边界: ${required}`);
