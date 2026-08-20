@@ -7,7 +7,7 @@
 ## 当前状态
 
 - 项目从空目录新建。
-- 当前源码版本为 `0.3.1`，文件通道定位为“不透明普通文件传输”。
+- 当前源码版本为 `0.3.2`，文件通道定位为“不透明普通文件传输”。
 - 第三方依赖固定为 `weixin-agent-sdk@0.5.0`；Node.js 要求 `>=22`。
 - 已审计上游默认消息循环：其内置 `/echo`、`/toggle-debug`、`/clear`，并含 Agent 返回值自动回复、异常通知和打字状态发送。项目补丁移除了这些入站触发路径。
 - 入站业务代码只校验文本并把附件按不透明普通文件保存到受控 inbox；命令样式文本、越界路径、目录和符号链接失败关闭，附件内容、类型和哈希不检查。
@@ -57,6 +57,8 @@
 - 2026-08-20 经用户授权完成重新扫码登录，凭据索引与活动账号文件成功更新；用户明确纠正微信端只允许一个 Bot，新扫码会使旧绑定失效，因此“新账号文件 ID 等于第二个 Bot 对话”的推断已撤回。新绑定后 SDK monitor 仍收不到入站；停止 monitor 后直接请求当前 token 的 `getupdates`，使用现有游标和空游标均为 HTTP 200、`msgs=[]`，响应含不同的 `get_updates_buf`/兼容 `sync_buf`。诊断加入腾讯当前实现的 `iLink-App-Id`、`iLink-App-ClientVersion` 和当前元信息后结果仍为空，故暂不能把缺头认定为根因，也未把诊断改动部署到 SDK。npm `latest` 仍为 `weixin-agent-sdk@0.5.0`。桥接已恢复 Running；当前结论是微信服务端未向新 token 交付消息，真实令牌持久化验收仍未完成。
 - 2026-08-20 对唯一 Bot 执行元数据最小化的在线状态诊断：`notifyStart` 返回 HTTP 200、`ret=0`，随后连续 3 分钟、10 次 `getupdates` 轮询未取得消息元数据；由于不能确认用户是否在该窗口内发送，该结果不作为消息交付失败证据。依据腾讯当前实现补入 `iLink-App-Id`、`iLink-App-ClientVersion`、启动 `notifyStart` 和正常停止 `notifyStop`，同时保留所有入站禁命令、禁自动外发边界；版本更新为 `0.3.1`。
 - `0.3.1` 首次运行部署暴露了静态字符串扫描的缺口：零上下文 SDK 补丁把生命周期函数放入 `getUpdates` 局部作用域，启动日志明确报 `ReferenceError: notifyStart is not defined`。该副本未通过运行验收，已保留于 `service\backups\app-0.3.1-broken-notifystart-scope-20260820`；补丁随后改为替换函数闭合行，并新增顶层作用域结构检查。修正版在独立目录与最终运行路径均通过 23/23 测试和安装后 SDK 扫描，计划任务为 Running、桥接进程 1 个、活动连接 2 条，新启动日志不再出现 `notifyStart` 未定义、拒绝或网络错误。旧 `0.3.0` 副本保留于 `service\backups\app-0.3.0-before-0.3.1-20260820`，运行数据和凭据未移动；消息接收仍需用户向原来的唯一 Bot 发送普通文本完成真实验收。
+- 2026-08-20 用户在 `0.3.1` 下再次发送普通文本后，同步游标持续推进但 inbox 未落盘，日志出现 `ReferenceError: freshContextTokenRecords is not defined`。安装后 SDK 检查确认持久化函数同样被零上下文补丁错误嵌入 `contextTokenKey`，且常量落入注释；该消息因游标已在处理前保存而不会自动重投。`0.3.2` 将注释闭合行和 `contextTokenKey` 闭合行纳入替换，并增加两项顶层结构检查；独立目录和最终运行路径均通过 23/23 测试与安装后扫描。
+- `0.3.2` 真实收件验收通过：用户向原来的唯一 Bot 发送普通文本后，于 2026-08-20 14:09:42 +08:00 新增 1 条 schema v2 收据，状态为 `accepted`，同一时刻首次生成受限的 `context-tokens.json`。检查未读取或记录正文、真实用户标识或令牌；该次入站后的 `OUTBOUND_*` 事件为 0，最新启动后的相关运行错误为 0，任务保持 Running。由此确认唯一 Bot 的入站交付、受控 inbox 落盘和上下文令牌持久化均已恢复；跨进程主动发送恢复仍需在用户下一次明确授权发送时单独验证。
 - 2026-08-17 在 `G:\CodexWork\微信连接\opaque-transfer-check-20260817-2250` 完成独立 frozen-lockfile 安装，20/20 测试通过，生产依赖审计为 0 个已知漏洞，安装后 SDK 扫描确认 100 MiB 固定入站保存上限已移除，斜杠命令和入站自动外发路径仍被补丁移除；项目与本机两个 Skills 均通过 `quick_validate.py` 且内容一致。
 - 用户明确授权后，固定运行副本已切换到提交 `314370b` 的 `0.2.0`。旧 `app` 保留于 `G:\CodexWork\微信连接\service\backups\app-before-314370b-20260817-2321`；`runtime-data`、凭据、inbox、outbox 和审计未移动。首次启动因旁路安装的 pnpm 链接仍指向原 `app-next` 路径而失败，随后在最终 `service\app` 路径执行 frozen-lockfile 强制重建依赖并再次通过 20/20 测试和 SDK 补丁扫描。计划任务最终为 `Running`，WScript/PowerShell/Node 各 1 个，恢复既有同步游标并建立活动连接；本次重启后的 `OUTBOUND_*` 事件为 0，未发送任何消息。
 

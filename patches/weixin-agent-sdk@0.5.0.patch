@@ -6,7 +6,7 @@ index c935fa4..0f0edcf 100644
 -	return { channel_version: CHANNEL_VERSION };
 +	return {
 +		channel_version: CHANNEL_VERSION,
-+		bot_agent: "WeixinSafeBridge/0.3.1"
++		bot_agent: "WeixinSafeBridge/0.3.2"
 +	};
 @@ -369,0 +373,2 @@ function buildHeaders(opts) {
 +		"iLink-App-Id": "bot",
@@ -40,20 +40,23 @@ index c935fa4..0f0edcf 100644
 +		label: "notifyStop"
 +	});
 +}
-@@ -1058,3 +1089,4 @@ async function uploadFileAttachmentToWeixin(params) {
+@@ -1058,4 +1089,9 @@ async function uploadFileAttachmentToWeixin(params) {
 -* be echoed verbatim in every outbound send. It is not persisted: the monitor
 -* loop populates this map on each inbound message, and the outbound adapter
 -* reads it back when the agent sends a reply.
+-*/
 +* be echoed verbatim in every outbound send. Persist only the latest token for
 +* each account+user pair so a process restart does not discard a still-valid
 +* proactive-send context. The token file remains SDK state and must be treated
 +* like account credentials.
-@@ -1061,0 +1094,4 @@ async function uploadFileAttachmentToWeixin(params) {
++*/
 +const CONTEXT_TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1e3;
 +function resolveContextTokenPath() {
 +	return path.join(resolveWeixinStateDir(), "context-tokens.json");
 +}
-@@ -1064,0 +1101,40 @@ function contextTokenKey(accountId, userId) {
+@@ -1065 +1101,41 @@ function contextTokenKey(accountId, userId) {
+-}
++}
 +function readPersistedContextTokens() {
 +	try {
 +		const parsed = JSON.parse(fs.readFileSync(resolveContextTokenPath(), "utf8"));

@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  weixin-agent-sdk@0.5.0: 640cbe2a7c4fd586ad3e4605beca5139be9b21e6b0856a057eb04171088009e5
+  weixin-agent-sdk@0.5.0: 5e2d533ec62d9e51bac3b67dbb14ce8486d22ba2ce40b19d18247c26ec3c3598
 
 importers:
 
@@ -13,7 +13,7 @@ importers:
     dependencies:
       weixin-agent-sdk:
         specifier: 0.5.0
-        version: 0.5.0(patch_hash=640cbe2a7c4fd586ad3e4605beca5139be9b21e6b0856a057eb04171088009e5)
+        version: 0.5.0(patch_hash=5e2d533ec62d9e51bac3b67dbb14ce8486d22ba2ce40b19d18247c26ec3c3598)
 
 packages:
 
@@ -29,6 +29,6 @@ snapshots:
 
   qrcode-terminal@0.12.0: {}
 
-  weixin-agent-sdk@0.5.0(patch_hash=640cbe2a7c4fd586ad3e4605beca5139be9b21e6b0856a057eb04171088009e5):
+  weixin-agent-sdk@0.5.0(patch_hash=5e2d533ec62d9e51bac3b67dbb14ce8486d22ba2ce40b19d18247c26ec3c3598):
     dependencies:
       qrcode-terminal: 0.12.0
