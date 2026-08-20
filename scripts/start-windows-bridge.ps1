@@ -58,12 +58,18 @@ try {
   New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
   $logFile = Join-Path $logRoot ("bridge-" + (Get-Date -Format "yyyy-MM-dd") + ".log")
   $controlRoot = Join-Path $dataRoot "local-control"
+  $sdkStateRoot = Join-Path $dataRoot "sdk-state"
   New-Item -ItemType Directory -Path $controlRoot -Force | Out-Null
+  New-Item -ItemType Directory -Path $sdkStateRoot -Force | Out-Null
   $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $icacls = Join-Path $env:SystemRoot "System32\icacls.exe"
   & $icacls $controlRoot /inheritance:r /grant:r "*${currentSid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" /Q | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to restrict the local-control directory ACL."
+  }
+  & $icacls $sdkStateRoot /inheritance:r /grant:r "*${currentSid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" /T /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to restrict the sdk-state directory ACL."
   }
 
   $env:WEIXIN_BRIDGE_DATA_DIR = $dataRoot

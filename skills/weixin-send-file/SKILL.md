@@ -27,17 +27,19 @@ CLI:  G:\CodexWork\微信连接\service\app\src\file-transfer-cli.mjs
 Data: G:\CodexWork\微信连接\service\runtime-data
 ```
 
-1. 运行 `prepare-send`，传入用户给出的绝对 `--file`；仅当用户明确要求附言时传 `--text`。不得预先复制或改写源文件。
-2. 检查 JSON 收据中的 `fileName`、`byteLength`、`mimeType`、`transportMode` 和五分钟有效的 `approvalId`。准备阶段不得产生外发，不得报告文件哈希。
-3. 若请求只是预检，报告收据并停止。
-4. 若请求已明确授权发送，在同一任务中设置一次性进程环境变量 `WEIXIN_ENABLE_REAL_SEND=1`，运行 `commit-send --approval <id> --confirm-real-send`。不要把环境变量持久化。
-5. 只有返回 `operation=sent` 才报告成功。若缺少微信 `context_token`，请用户从微信发送一条普通消息后重新明确发起；不得自动回复或自行重试。
+1. 先运行 `status`。若 `available=true`，直接继续；若为 `false`，请用户从微信发送一条普通消息后停止，不创建发送批准，也不得自动重试。
+2. 运行 `prepare-send`，传入用户给出的绝对 `--file`；仅当用户明确要求附言时传 `--text`。不得预先复制或改写源文件。
+3. 检查 JSON 收据中的 `fileName`、`byteLength`、`mimeType`、`transportMode` 和五分钟有效的 `approvalId`。准备阶段不得产生外发，不得报告文件哈希。
+4. 若请求只是预检，报告收据并停止。
+5. 若请求已明确授权发送，在同一任务中设置一次性进程环境变量 `WEIXIN_ENABLE_REAL_SEND=1`，运行 `commit-send --approval <id> --confirm-real-send`。不要把环境变量持久化。
+6. 只有返回 `operation=sent` 才报告成功。若发送时令牌失效，请用户从微信发送一条普通消息后重新明确发起；不得自动回复或自行重试。
 
 PowerShell 调用格式：
 
 ```powershell
 $env:WEIXIN_BRIDGE_DATA_DIR = 'G:\CodexWork\微信连接\service\runtime-data'
 $node = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+& $node 'G:\CodexWork\微信连接\service\app\src\file-transfer-cli.mjs' status
 & $node 'G:\CodexWork\微信连接\service\app\src\file-transfer-cli.mjs' prepare-send --file '<绝对文件路径>'
 ```
 

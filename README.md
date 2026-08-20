@@ -48,7 +48,7 @@ runtime-data/
   outbox/      # 本地准备的可出站文件
   audit/       # JSONL 审计记录
   local-control/ # 本机发送控制令牌；仅当前用户和 SYSTEM 可访问
-  sdk-state/   # SDK 凭据和同步游标；不得提交
+  sdk-state/   # SDK 凭据、同步游标和短期会话令牌；不得提交
 ```
 
 ## 真实微信登录与连接
@@ -65,7 +65,7 @@ pnpm weixin:start -- --confirm-real-connection
 
 登录入口会把 SDK 状态定向到 `WEIXIN_BRIDGE_DATA_DIR\sdk-state`，不要求安装或运行 OpenClaw。运行入口只接收并落盘；不会自动回复。
 
-本地 `src/file-transfer-cli.mjs` 提供收件列表/导出和文件发送的准备/提交接口。发送准备不会外发；真实提交必须在用户本轮明确要求发送时同时提供一次性环境开关 `WEIXIN_ENABLE_REAL_SEND=1`、`--confirm-real-send` 参数和五分钟内的单次批准 ID。SDK 只会发给当前登录用户，且要求运行期间已收到消息以取得有效 `context_token`。真实发送仍必须逐次取得当轮授权，不自动重试失败或不确定结果。
+本地 `src/file-transfer-cli.mjs` 提供收件列表/导出、只读 `status` 和文件发送的准备/提交接口。发送准备不会外发；真实提交必须在用户本轮明确要求发送时同时提供一次性环境开关 `WEIXIN_ENABLE_REAL_SEND=1`、`--confirm-real-send` 参数和五分钟内的单次批准 ID。SDK 只会发给当前登录用户；收到入站消息后，会把对应 `context_token` 作为敏感 SDK 状态原子写入磁盘，并按 23 小时保守有效期跨进程恢复。状态接口只显示可用性、接收时间和估计失效时间，不显示账号、用户或令牌。令牌过期或被微信撤销后仍需用户发送一条普通消息刷新。真实发送仍必须逐次取得当轮授权，不自动重试失败或不确定结果。
 
 本机 Codex Skills `weixin-receive-file` 和 `weixin-send-file` 固化了上述流程：收件 Skill 不读正文、不搜索其他目录；发件 Skill 只接受当前请求中明确给出的单个绝对路径，不自动重试或转发。
 

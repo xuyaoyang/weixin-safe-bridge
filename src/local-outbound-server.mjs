@@ -24,6 +24,7 @@ export async function createLocalOutboundServer({
   dataRoot,
   prepareOutbound,
   sendOutbound,
+  outboundStatus,
   clock = () => Date.now(),
   randomId = randomUUID,
   approvalTtlMs = DEFAULT_APPROVAL_TTL_MS,
@@ -48,6 +49,14 @@ export async function createLocalOutboundServer({
       throw new PolicyError("LOCAL_CONTROL_UNAUTHORIZED", "本地控制请求未授权");
     }
     removeExpired();
+
+    if (request.operation === "status") {
+      return {
+        ok: true,
+        operation: "status",
+        ...(typeof outboundStatus === "function" ? await outboundStatus() : { available: false }),
+      };
+    }
 
     if (request.operation === "prepare-file") {
       if (pending.size >= maxPending) {

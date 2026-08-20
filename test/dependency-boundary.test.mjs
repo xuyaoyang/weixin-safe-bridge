@@ -28,6 +28,9 @@ test("补丁删除 SDK 入站大小硬限制、斜杠命令和所有入站触发
   assert.match(patchText, /^-\s*if \(response\.media\)/mu);
   assert.match(patchText, /^-\s*sendWeixinErrorNotice\(/mu);
   assert.match(patchText, /^\+\s*await deps\.agent\.chat\(request\);/mu);
+  assert.match(patchText, /^\+const CONTEXT_TOKEN_MAX_AGE_MS = 23 \* 60 \* 60 \* 1e3;$/mu);
+  assert.match(patchText, /^\+\s*const persisted = freshContextTokenRecords\(\)/mu);
+  assert.match(patchText, /^\+\s*fs\.writeFileSync\(tempPath,/mu);
 });
 
 test("入站处理模块不引用本地发送控制面", async () => {

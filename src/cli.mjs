@@ -20,6 +20,7 @@ if (command === "login") {
         dataRoot: bridge.dataRoot,
         prepareOutbound: bridge.prepareOutbound,
         sendOutbound: bridge.sendOutbound,
+        outboundStatus: bridge.outboundStatus,
       })
     : undefined;
   console.log(`微信安全桥接已启动；inbox/outbox 根目录：${bridge.dataRoot}`);

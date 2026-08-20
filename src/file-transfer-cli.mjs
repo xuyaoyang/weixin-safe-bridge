@@ -103,6 +103,10 @@ async function run() {
   const dataRoot = resolveDataRoot();
   if (command === "prepare-send") return stageAndPrepare(dataRoot, options);
   if (command === "commit-send") return commitSend(dataRoot, options);
+  if (command === "status") {
+    rejectUnknownOptions(options, new Set());
+    return sendLocalControlRequest(dataRoot, { operation: "status" });
+  }
   if (command === "list-inbox") {
     rejectUnknownOptions(options, new Set(["--limit"]));
     const limit = options.has("--limit") ? Number(options.get("--limit")) : 10;
@@ -121,7 +125,7 @@ async function run() {
   }
   throw new PolicyError(
     "UNKNOWN_FILE_TRANSFER_COMMAND",
-    "用法：file-transfer-cli.mjs <prepare-send|commit-send|list-inbox|export-inbox>",
+    "用法：file-transfer-cli.mjs <status|prepare-send|commit-send|list-inbox|export-inbox>",
   );
 }
 

@@ -6,6 +6,15 @@ const bundle = await fs.readFile(sdkEntry, "utf8");
 if (!bundle.includes("const WEIXIN_MEDIA_MAX_BYTES = Number.MAX_SAFE_INTEGER;")) {
   throw new Error("已安装 SDK 仍保留固定入站文件大小上限；拒绝继续");
 }
+for (const required of [
+  "const CONTEXT_TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1e3;",
+  "function writePersistedContextTokens(records)",
+  "const persisted = freshContextTokenRecords().find",
+]) {
+  if (!bundle.includes(required)) {
+    throw new Error(`已安装 SDK 缺少会话令牌持久化边界: ${required}`);
+  }
+}
 const start = bundle.indexOf("async function processOneMessage");
 const end = bundle.indexOf("//#endregion", start);
 

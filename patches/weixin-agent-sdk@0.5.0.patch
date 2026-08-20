@@ -1,19 +1,89 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c935fa4..be85605 100644
+index c935fa4..a398635 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -1586 +1586 @@
+@@ -1058,3 +1058,4 @@ async function uploadFileAttachmentToWeixin(params) {
+-* be echoed verbatim in every outbound send. It is not persisted: the monitor
+-* loop populates this map on each inbound message, and the outbound adapter
+-* reads it back when the agent sends a reply.
++* be echoed verbatim in every outbound send. Persist only the latest token for
++* each account+user pair so a process restart does not discard a still-valid
++* proactive-send context. The token file remains SDK state and must be treated
++* like account credentials.
+@@ -1062,0 +1064,4 @@ const contextTokenStore = /* @__PURE__ */ new Map();
++const CONTEXT_TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1e3;
++function resolveContextTokenPath() {
++	return path.join(resolveWeixinStateDir(), "context-tokens.json");
++}
+@@ -1065,0 +1071,40 @@ function contextTokenKey(accountId, userId) {
++function readPersistedContextTokens() {
++	try {
++		const parsed = JSON.parse(fs.readFileSync(resolveContextTokenPath(), "utf8"));
++		if (parsed?.version !== 1 || !Array.isArray(parsed.records)) return [];
++		return parsed.records.filter((record) => typeof record?.accountId === "string" && typeof record?.userId === "string" && typeof record?.token === "string" && Number.isFinite(record?.receivedAtMs));
++	} catch {
++		return [];
++	}
++}
++function writePersistedContextTokens(records) {
++	const tokenPath = resolveContextTokenPath();
++	const dir = path.dirname(tokenPath);
++	const tempPath = `${tokenPath}.${process.pid}.${randomUUID()}.tmp`;
++	fs.mkdirSync(dir, { recursive: true, mode: 448 });
++	try {
++		fs.writeFileSync(tempPath, `${JSON.stringify({
++			version: 1,
++			records
++		}, null, 2)}\n`, {
++			encoding: "utf8",
++			mode: 384,
++			flag: "wx"
++		});
++		fs.renameSync(tempPath, tokenPath);
++	} finally {
++		try {
++			fs.rmSync(tempPath, { force: true });
++		} catch {}
++	}
++}
++function freshContextTokenRecords(now = Date.now()) {
++	const records = readPersistedContextTokens();
++	const fresh = records.filter((record) => record.receivedAtMs <= now && now - record.receivedAtMs < CONTEXT_TOKEN_MAX_AGE_MS);
++	if (fresh.length !== records.length) try {
++		writePersistedContextTokens(fresh);
++	} catch (err) {
++		logger.warn(`context token expiry cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
++	}
++	return fresh;
++}
+@@ -1070,0 +1116,13 @@ function setContextToken(accountId, userId, token) {
++	const now = Date.now();
++	const records = freshContextTokenRecords(now).filter((record) => contextTokenKey(record.accountId, record.userId) !== k);
++	records.push({
++		accountId,
++		userId,
++		token,
++		receivedAtMs: now
++	});
++	try {
++		writePersistedContextTokens(records);
++	} catch (err) {
++		logger.warn(`context token persistence failed: ${err instanceof Error ? err.message : String(err)}`);
++	}
+@@ -1075 +1133,4 @@ function getContextToken(accountId, userId) {
+-	const val = contextTokenStore.get(k);
++	const persisted = freshContextTokenRecords().find((record) => contextTokenKey(record.accountId, record.userId) === k);
++	if (persisted) contextTokenStore.set(k, persisted.token);
++	else contextTokenStore.delete(k);
++	const val = persisted?.token;
+@@ -1586 +1647 @@ async function silkToWav(silkBuf) {
 -const WEIXIN_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
 +const WEIXIN_MEDIA_MAX_BYTES = Number.MAX_SAFE_INTEGER;
-@@ -1812,25 +1812,9 @@ function findMediaItem(itemList) {
- 	return itemList.find((i) => i.type === MessageItemType.TEXT && i.ref_msg?.message_item && isMediaItem(i.ref_msg.message_item))?.ref_msg?.message_item ?? void 0;
- }
- /**
+@@ -1815,2 +1876 @@ function findMediaItem(itemList) {
 -* Process a single inbound message:
 -*   slash command check → download media → call agent → send reply.
 +* Process a single inbound message without inbound-triggered commands or replies.
- */
- async function processOneMessage(full, deps) {
+@@ -1819,15 +1878,0 @@ async function processOneMessage(full, deps) {
 -	const receivedAt = Date.now();
 -	const textBody = extractTextBody(full.item_list);
 -	if (textBody.startsWith("/")) {
@@ -29,13 +99,7 @@ index c935fa4..be85605 100644
 -			onClear: () => deps.agent.clearSession?.(conversationId)
 -		}, receivedAt, full.create_time_ms)).handled) return;
 -	}
- 	const contextToken = full.context_token;
- 	if (contextToken) setContextToken(deps.accountId, full.from_user_id ?? "", contextToken);
- 	let media;
-@@ -1871,72 +1855,10 @@ async function processOneMessage(full, deps) {
- 		text: bodyFromItemList(full.item_list),
- 		media
- 	};
+@@ -1874,18 +1918,0 @@ async function processOneMessage(full, deps) {
 -	const to = full.from_user_id ?? "";
 -	let typingTimer;
 -	const startTyping = () => {
@@ -54,7 +118,7 @@ index c935fa4..be85605 100644
 -		startTyping();
 -		typingTimer = setInterval(startTyping, 1e4);
 -	}
- 	try {
+@@ -1893,26 +1920 @@ async function processOneMessage(full, deps) {
 -		const response = await deps.agent.chat(request);
 -		if (response.media) {
 -			let filePath;
@@ -82,7 +146,7 @@ index c935fa4..be85605 100644
 -			}
 -		});
 +		await deps.agent.chat(request);
- 	} catch (err) {
+@@ -1920,20 +1922 @@ async function processOneMessage(full, deps) {
 -		logger.error(`processOneMessage: agent or send failed: ${err instanceof Error ? err.stack ?? err.message : JSON.stringify(err)}`);
 -		sendWeixinErrorNotice({
 -			to,
@@ -104,6 +168,3 @@ index c935fa4..be85605 100644
 -			}
 -		}).catch(() => {});
 +		logger.error(`processOneMessage: inbound storage failed: ${err instanceof Error ? err.stack ?? err.message : JSON.stringify(err)}`);
- 	}
- }
- //#endregion

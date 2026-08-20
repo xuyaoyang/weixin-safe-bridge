@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { createInboxOnlyAgent } from "./bridge-agent.mjs";
+import { readContextTokenStatus } from "./context-token-status.mjs";
 import { InboxStore } from "./inbox-store.mjs";
 import { createOutboundController } from "./outbound-controller.mjs";
 import { resolveDataRoot, resolveSdkInboundRoot } from "./runtime-config.mjs";
@@ -28,6 +29,7 @@ export async function startWeixinBridge({ dataRoot = resolveDataRoot(), log = co
     outboxRoot: outbound.outboxRoot,
     prepareOutbound: outbound.prepare,
     sendOutbound: outbound.send,
+    outboundStatus: () => readContextTokenStatus(dataRoot),
     wait: () => bot.wait(),
   });
 }

@@ -71,6 +71,34 @@ test("本地出站采用短时单次批准，准备阶段不会发送", async (t
   );
 });
 
+test("本地状态接口需要认证且不触发发送", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "weixin-safe-status-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const dataRoot = path.join(root, "data");
+  let sent = 0;
+  const server = await createLocalOutboundServer({
+    dataRoot,
+    prepareOutbound: async () => { throw new Error("状态检查不应准备发送"); },
+    sendOutbound: async () => { sent += 1; },
+    outboundStatus: async () => ({
+      available: true,
+      receivedAt: "2026-08-20T00:00:00.000Z",
+      expiresAtEstimate: "2026-08-20T23:00:00.000Z",
+    }),
+  });
+  t.after(() => server.close());
+
+  const status = await sendLocalControlRequest(dataRoot, { operation: "status" });
+  assert.deepEqual(status, {
+    ok: true,
+    operation: "status",
+    available: true,
+    receivedAt: "2026-08-20T00:00:00.000Z",
+    expiresAtEstimate: "2026-08-20T23:00:00.000Z",
+  });
+  assert.equal(sent, 0);
+});
+
 test("收件查询只返回最小元数据，并按精确引用无覆盖导出", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "weixin-safe-inbox-export-test-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
