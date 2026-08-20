@@ -49,6 +49,7 @@
 - 固定运行副本已快进到提交 `0b7ae29`，锁文件安装、19/19 测试、安装后 SDK 补丁扫描和生产依赖审计通过。任务重启后桥接进程 1 个且连接活动；`local-control` 和默认 `received` 目录均关闭 ACL 继承，只允许当前用户与 SYSTEM。本地令牌握手只执行了“不存在批准的取消”并成功返回，未创建批准；outbox 文件和 `OUTBOUND_*` 审计仍为 0。
 - 2026-08-17 经用户逐次明确授权完成首次真实主动文件发送：前两次提交失败且未自动重试，微信产生新入站上下文后，一个非敏感 Markdown 文件由 SDK 返回 `sent`，审计顺序为 `OUTBOUND_ATTEMPT` 后 `OUTBOUND_SENT`。项目记录不保存真实文件名、聊天正文或用户标识。
 - 2026-08-20 在 `G:\CodexWork\微信连接\context-token-check-20260820` 完成独立 frozen-lockfile 安装；23/23 测试、安装后 SDK 扫描和生产依赖审计通过。新增测试确认状态接口不泄露令牌/账号、缺失/损坏/未来时间/超过 23 小时均失败关闭，状态查询不准备或发送消息。
+- 固定运行副本首次应用 `sdk-state` ACL 时，`icacls /T` 未给已关闭继承的现有凭据文件写入访问 ACE，导致 SDK 误报未登录；文件仍存在且未覆盖。已按目录与文件分别设置当前用户和 SYSTEM 的显式权限，并修正启动脚本，避免依赖继承状态。
 - 2026-08-17 在 `G:\CodexWork\微信连接\opaque-transfer-check-20260817-2250` 完成独立 frozen-lockfile 安装，20/20 测试通过，生产依赖审计为 0 个已知漏洞，安装后 SDK 扫描确认 100 MiB 固定入站保存上限已移除，斜杠命令和入站自动外发路径仍被补丁移除；项目与本机两个 Skills 均通过 `quick_validate.py` 且内容一致。
 - 用户明确授权后，固定运行副本已切换到提交 `314370b` 的 `0.2.0`。旧 `app` 保留于 `G:\CodexWork\微信连接\service\backups\app-before-314370b-20260817-2321`；`runtime-data`、凭据、inbox、outbox 和审计未移动。首次启动因旁路安装的 pnpm 链接仍指向原 `app-next` 路径而失败，随后在最终 `service\app` 路径执行 frozen-lockfile 强制重建依赖并再次通过 20/20 测试和 SDK 补丁扫描。计划任务最终为 `Running`，WScript/PowerShell/Node 各 1 个，恢复既有同步游标并建立活动连接；本次重启后的 `OUTBOUND_*` 事件为 0，未发送任何消息。
 

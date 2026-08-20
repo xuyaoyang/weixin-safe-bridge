@@ -67,9 +67,21 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to restrict the local-control directory ACL."
   }
-  & $icacls $sdkStateRoot /inheritance:r /grant:r "*${currentSid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" /T /Q | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to restrict the sdk-state directory ACL."
+  $sdkStateDirectories = @(
+    Get-Item -LiteralPath $sdkStateRoot
+    Get-ChildItem -LiteralPath $sdkStateRoot -Directory -Recurse -Force
+  )
+  foreach ($item in $sdkStateDirectories) {
+    & $icacls $item.FullName /inheritance:r /grant:r "*${currentSid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to restrict an sdk-state directory ACL."
+    }
+  }
+  foreach ($item in Get-ChildItem -LiteralPath $sdkStateRoot -File -Recurse -Force) {
+    & $icacls $item.FullName /inheritance:r /grant:r "*${currentSid}:F" "*S-1-5-18:F" /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to restrict an sdk-state file ACL."
+    }
   }
 
   $env:WEIXIN_BRIDGE_DATA_DIR = $dataRoot
